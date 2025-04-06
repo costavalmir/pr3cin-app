@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request
 import pandas as pd
+import os
 
 app = Flask(__name__)
 
@@ -17,17 +18,8 @@ def index():
 
 @app.route("/resultado", methods=["POST"])
 def resultado():
-    total_itens = int(request.form.get("total_itens", 0))
-    produtos_check = request.form.getlist("produto")
-    itens_selecionados = []
-
-    for i in range(total_itens):
-        produto = request.form.get(f"produto_nome_{i}")
-        quantidade_str = request.form.get(f"quantidade_{i}")
-        quantidade = int(quantidade_str) if quantidade_str and quantidade_str.isdigit() else 1
-
-        if produto in produtos_check:
-            itens_selecionados.append((produto, quantidade))
+    itens_selecionados = request.form.getlist("produto")
+    quantidades = request.form.getlist("quantidade")
 
     if not itens_selecionados:
         return "Nenhum item selecionado."
@@ -36,20 +28,22 @@ def resultado():
     economia_total = 0
     gasto_total = 0
 
-    for item, qtde in itens_selecionados:
+    for item, qtde in zip(itens_selecionados, quantidades):
+        qtde = int(qtde) if qtde.isdigit() else 1
         dados_item = df[df["Descrição do Item"] == item]
+
         if not dados_item.empty:
             dados_item = dados_item.sort_values("Valor Unitário")
             local_mais_barato = dados_item.iloc[0]
             local_mais_caro = dados_item.iloc[-1]
 
             valor_unitario = local_mais_barato["Valor Unitário"]
-            valor_mais_barato = valor_unitario * qtde
-            valor_mais_caro = local_mais_caro["Valor Unitário"] * qtde
+            valor_total = valor_unitario * qtde
+            valor_caro = local_mais_caro["Valor Unitário"] * qtde
 
-            economia = valor_mais_caro - valor_mais_barato
+            economia = valor_caro - valor_total
             economia_total += economia
-            gasto_total += valor_mais_barato
+            gasto_total += valor_total
 
             local = local_mais_barato["Local"]
             item_resultado = {
@@ -57,7 +51,7 @@ def resultado():
                 "quantidade": qtde,
                 "local": local,
                 "valor_unitario": round(valor_unitario, 2),
-                "valor_total": round(valor_mais_barato, 2)
+                "valor_total": round(valor_total, 2)
             }
 
             if local not in resultado_por_mercado:
@@ -73,4 +67,5 @@ def resultado():
     )
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host="0.0.0.0", port=port)
